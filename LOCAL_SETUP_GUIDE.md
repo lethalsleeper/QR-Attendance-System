@@ -17,7 +17,7 @@ phones connect to it. No cables during use, no Android emulator, no credit card,
          └────────────────────┘ camera└──────────────────────┘
 ```
 
-* **Parts A–E: once** (about 45 minutes in total).
+* **Parts A–E: once** (about 1–1.5 hours in total, mostly downloads).
 * **Parts F–H: every time** you use the app.
 
 Whenever a command is shown, use **Command Prompt**: press the Windows key, type `cmd`,
@@ -25,7 +25,7 @@ press Enter. Don't use PowerShell.
 
 ---
 
-## Part A — Install two tools (one time)
+## Part A — Install the tools (one time)
 
 ### A1. Node.js
 1. Go to <https://nodejs.org>, download the **LTS** version for Windows (`.msi`).
@@ -46,9 +46,32 @@ firebase --version
 ```
 It should print `13.x.x`.
 
-**Java** and the **Android SDK** are already installed on this laptop. **Android Studio is not
-needed.** It's heavy for a 6 GB laptop. Install it later only if you want to read or edit the
-code comfortably.
+### A3. Java (JDK 21)
+The build tools and the Firestore emulator both run on Java.
+1. Go to <https://adoptium.net>, download **Temurin 21 (LTS)** for Windows (`.msi`).
+2. In the installer, enable **"Set JAVA_HOME variable"** and **"Add to PATH"**, then finish.
+3. Open a **new** Command Prompt and check it:
+   ```
+   java -version
+   ```
+   It should print `21.x.x`. (Any Java from 17 to 23 works; Java 24 or newer is too new for
+   this project's Gradle version.)
+
+### A4. Android SDK (via Android Studio)
+The Android SDK is Google's toolbox for building apps. The easiest way to get it is through
+**Android Studio**:
+1. Download it from <https://developer.android.com/studio> and install it with the default
+   options. In its first-run wizard, let it download the **Android SDK**.
+2. Open this project once (**File → Open** → the project folder) and wait for the
+   "Gradle sync" bar at the bottom to finish. This records where your SDK is
+   (in `local.properties`), which `build-app.bat` needs.
+   * If it says the **Gradle JVM** is incompatible, choose **Use JVM 21**.
+   * If it offers to **upgrade the Android Gradle Plugin**, decline. The project's tool
+     versions are tested together.
+
+**Low on memory (8 GB RAM or less)?** You can close Android Studio after that first sync and
+use `build-app.bat` (Part D) to build. Never run the Android Studio phone emulator on such a
+laptop; this guide uses real phones instead.
 
 ---
 
@@ -67,8 +90,9 @@ Firebase's **Spark** plan is free forever. **Never click "Upgrade" / "Blaze".**
    ```
    Leave the other fields empty → **Register app**.
 6. Click **Download google-services.json**, then **Next → Next → Continue to console**.
-7. Move the file into the project's `app` folder:
-   `D:\Users\darkf\Documents\Android Projects\QRAttendanceSystem\app\google-services.json`
+7. Move the file into the project's `app` folder, next to `build.gradle.kts`:
+   `<your project folder>\app\google-services.json`
+   (for example `C:\Projects\QRAttendanceSystem\app\google-services.json`).
    The name must be exactly `google-services.json`. If Windows saved it as
    `google-services (1).json`, rename it.
 
@@ -95,7 +119,7 @@ folder.
 
 1. Close Chrome and other heavy programs, because building uses a lot of memory.
 2. Double-click **`build-app.bat`**. The first build downloads libraries and can take
-   **10–20 minutes** on this laptop. Later builds take 1–3 minutes.
+   **10–20 minutes** on a slower laptop. Later builds take 1–3 minutes.
 3. When it finishes, a folder window opens with **`QR-Attendance.apk`** selected. That's the
    app.
 

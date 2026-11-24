@@ -1,9 +1,31 @@
 # QR Attendance System
 
-An Android app that replaces paper roll-calls. A **teacher** starts a session and shows a
-time-limited QR code; **students** scan it with their phones; a **Cloud Function** validates
-the scan on the server and records attendance in **Cloud Firestore**; the teacher sees each
-student appear on screen in real time.
+**An Android app that replaces paper roll-calls with time-limited QR codes.**
+A teacher starts a session and shows a QR code; students scan it with their phones; a Cloud
+Function checks the scan on the server, and each student appears on the teacher's screen in
+real time.
+
+**Kotlin · Jetpack Compose · Material 3 · MVVM · Hilt · Coroutines/Flow · Firebase (Auth,
+Firestore, Cloud Functions) · CameraX · ML Kit · ZXing**
+
+---
+
+## Contents
+
+- [How it works](#how-it-works)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Technology stack](#technology-stack)
+- [Architecture](#architecture)
+- [Security model](#security-model)
+- [Firestore data model](#firestore-data-model)
+- [Testing](#testing)
+- [Edge cases and how they are handled](#edge-cases-and-how-they-are-handled)
+- [Known limitations and future ideas](#known-limitations-and-future-ideas)
+
+---
+
+## How it works
 
 ```
 Teacher taps "Start Session"  ──►  createSession (Cloud Function)
@@ -15,24 +37,63 @@ Student scans QR (CameraX + ML Kit) ──►  markAttendance (Cloud Function)
 Teacher's live list updates  ◄──  Firestore snapshot listener → Flow → StateFlow → Compose
 ```
 
+The phone is never trusted with the decision: the server checks the student's role, the
+session's secret token, duplicates and expiry (on server time) before anything is saved, and
+Firestore security rules block any direct writes from the app.
+
 ---
 
-## 1. Features
+## Features
 
 | Area | What is implemented |
 |---|---|
 | **Auth** | Email/password login & registration, input validation, password visibility toggle, duplicate-email handling, loading/error states, role-based navigation, logout that clears the back stack |
 | **Role security** | Roles are assigned by the server. Teacher accounts require an administrator-created invite (`teacherInvites/{email}`); a modified APK cannot self-promote |
-| **Teacher** | Dashboard (greeting, profile, stats, session history with date/time/count/status, empty state), Start Session (subject + 2/5/10/15 min), Active Session (ZXing QR, countdown, live attendance list with names / roll numbers / times, "End session" with confirmation, "Session Expired" state that hides the QR but keeps the list), screen kept awake while live, tablet two-pane layout |
-| **Student** | Dashboard (greeting, roll number, Scan QR, attendance %, attended/conducted, per-subject breakdown, recent history), QR Scanner (CameraX preview, ML Kit QR detection, runtime permission incl. "Don't ask again" → Settings, torch toggle, one-scan-at-a-time, success/failure panels, Scan Again), full Attendance History grouped by month |
+| **Teacher** | Dashboard (greeting, profile, stats, **per-subject summary of sessions and check-ins**, session history with date/time/count/status, empty state), Start Session (subject + 2/5/10/15/20 min), Active Session (ZXing QR, countdown, live attendance list with names / roll numbers / times, "End session" with confirmation, "Session Expired" state that hides the QR but keeps the list), screen kept awake while live, tablet two-pane layout |
+| **Student** | Dashboard (greeting, roll number, Scan QR, attendance %, attended/conducted, per-subject breakdown, recent history), QR Scanner (CameraX preview, ML Kit QR detection, runtime permission incl. "Don't ask again" → Settings, torch toggle, one-scan-at-a-time, success/failure panels, Scan Again), full Attendance History grouped by month **with search by subject** |
 | **Backend** | 4 callable Cloud Functions + 1 scheduled function, Firestore transactions, constant-time token comparison, server-time expiry, duplicate prevention by document id, rollback on failed registration |
 | **Security rules** | Least-privilege Firestore rules; no client can write sessions or attendance; tokens readable only by the owning teacher |
 | **UX** | Material 3 design system (palette, typography, shapes, buttons, text fields, cards, loaders, error banners, empty states, dialogs, status pills), light + dark theme, edge-to-edge, offline banner, smooth navigation transitions |
-| **Tests** | 65 Android JVM unit tests · 28 backend unit tests · 43 backend emulator tests (functions + security rules) |
+| **Tests** | 65 Android JVM unit tests · 27 backend unit tests · 43 backend emulator tests (functions + security rules) |
 
 ---
 
-## 2. Technology stack
+## Quick start
+
+The whole project runs **for free** on your own computer: the backend uses the Firebase
+Emulator Suite, and the phones connect over the computer's Wi-Fi hotspot.
+
+1. Install **Node.js**, the **Firebase CLI** (`npm install -g firebase-tools@13`),
+   **Java 21** and **Android Studio** (for the Android SDK).
+2. Create a free Firebase project (Spark plan), register the Android app
+   `com.example.qrattendance`, and put its **`google-services.json`** in `app/`.
+3. One time: run `allow-hotspot-firewall.bat`, then `build-app.bat`, and install
+   `QR-Attendance.apk` on two phones.
+4. Each time: turn on the Windows **Mobile hotspot**, connect both phones, run
+   `start-emulators.bat`, and approve a teacher with `approve-teacher.bat`.
+5. Register a teacher and a student in the app, start a session, scan, and watch the student
+   appear live. Stop with `stop-emulators.bat`, which saves your data.
+
+📖 **Full step-by-step guide:** [LOCAL_SETUP_GUIDE.md](LOCAL_SETUP_GUIDE.md)
+☁️ **Deploying to real Firebase instead:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+
+### Helper scripts (Windows only)
+
+| Script | Does |
+|---|---|
+| `allow-hotspot-firewall.bat` | One-time, admin: allows TCP 9099/8080/5001 from the hotspot subnet 192.168.137.0/24 only (`remove` undoes it) |
+| `build-app.bat` | Builds the debug APK and copies it to `QR-Attendance.apk` for installing on the phones |
+| `start-emulators.bat` | Checks the hotspot, then starts Auth + Firestore + Functions emulators for the project id in `google-services.json`, restoring saved data |
+| `approve-teacher.bat` | Adds a `teacherInvites/{email}` entry in the local Firestore |
+| `stop-emulators.bat` | Exports all data to `emulator-data/`, then stops the emulators |
+
+The project is preconfigured for this setup (`useFirebaseEmulator=true`,
+`firebaseEmulatorHost=192.168.137.1` in `gradle.properties`). The emulator switch exists only in
+debug builds; release builds always use production Firebase over HTTPS.
+
+---
+
+## Technology stack
 
 | Layer | Library | Version |
 |---|---|---|
@@ -54,7 +115,7 @@ and adaptive icons without desugaring), `targetSdk 35`, `compileSdk 35`, Java/Ko
 
 ---
 
-## 3. Architecture
+## Architecture
 
 Clean MVVM with the repository pattern. Composables only render state and forward user
 intents; they never touch Firebase.
@@ -121,19 +182,23 @@ QRAttendanceSystem/
 │   ├── src/stats.js                attendance statistics
 │   ├── scripts/invite-teacher.js   admin tool to approve teacher emails
 │   └── test/{unit,emulator}/       backend tests
+├── docs/DEPLOYMENT.md              deploying to real (cloud) Firebase
+├── tools/hotspot-firewall.ps1      firewall rule used by allow-hotspot-firewall.bat
+├── *.bat                           Windows helper scripts (see Quick start)
 ├── firestore.rules
 ├── firestore.indexes.json
 ├── firebase.json                   deploy + emulator configuration
 ├── gradle/libs.versions.toml
 ├── settings.gradle.kts, build.gradle.kts, gradle.properties
+├── LOCAL_SETUP_GUIDE.md
 └── README.md
 ```
 
 ---
 
-## 4. Security model
+## Security model
 
-### 4.1 Role provisioning (why a modified APK can't become a teacher)
+### Role provisioning (why a modified APK can't become a teacher)
 
 1. The app never writes `users/{uid}`; Firestore rules deny `create` on profiles and deny any
    update to `role`, `email` or `rollNumber`.
@@ -150,7 +215,7 @@ QRAttendanceSystem/
 role `teacher`. To promote/demote an existing account, edit `role` in `users/{uid}` in the
 console (clients cannot).
 
-### 4.2 How the rules and Cloud Functions work together
+### How the rules and Cloud Functions work together
 
 | Operation | Who | Path |
 |---|---|---|
@@ -177,7 +242,7 @@ and readable only by the teacher who owns the session. Students only ever see it
 
 ---
 
-## 5. Firestore data model
+## Firestore data model
 
 ```
 users/{uid}
@@ -202,115 +267,21 @@ the app is identical to the stored one). Composite indexes are in `firestore.ind
 
 ---
 
-## 6. Firebase setup
-
-You need: a Google account, Node.js 20+, Java 17+ (for emulators) and the Firebase CLI
-(`npm install -g firebase-tools`, then `firebase login`).
-
-1. **Create a Firebase project** – <https://console.firebase.google.com> → *Add project*.
-   Google Analytics is not needed.
-2. **Add the Android app** – *Project overview → Add app → Android*.
-   * Package name: **`com.example.qrattendance`** (must match `applicationId`).
-   * App nickname: anything. SHA-1: not required (email/password auth).
-3. **Download `google-services.json`** from the last step of that wizard (or later from
-   *Project settings → Your apps*).
-4. **Place it at `app/google-services.json`** (next to `app/build.gradle.kts`). It is git-ignored.
-   Without it the project still compiles, but the app shows "Firebase is not configured".
-5. **Enable Email/Password sign-in** – *Build → Authentication → Get started → Sign-in method →
-   Email/Password → Enable → Save*.
-6. **Create Cloud Firestore** – *Build → Firestore Database → Create database* → choose a
-   location near you → start in **production mode** (never test mode; our rules replace the
-   defaults in step 7).
-7. **Link the CLI and deploy rules + indexes** (from the project root):
-   ```bash
-   firebase use --add
-   ```
-   ```bash
-   firebase deploy --only firestore:rules,firestore:indexes
-   ```
-   Index builds take a few minutes; until then the teacher dashboard shows a "missing index" error.
-8. **Deploy Cloud Functions** – Cloud Functions (2nd gen) and the scheduled function require the
-   **Blaze (pay-as-you-go)** plan: *Usage and billing → Modify plan*. A classroom demo stays far
-   inside the free quota. Then:
-   ```bash
-   cd functions && npm install && cd ..
-   ```
-   ```bash
-   firebase deploy --only functions
-   ```
-   Region is `us-central1` in **two places** that must match: `REGION` in `functions/index.js`
-   and `FUNCTIONS_REGION` in `app/build.gradle.kts`.
-9. **Environment configuration** – no secrets or environment variables are required. The only
-   project-specific settings are:
-   * **Approve teachers** before they register (choose one):
-     * Console: Firestore → *Start collection* `teacherInvites` → Document ID = the teacher's
-       email in lower case → field `used` (boolean) = `false`.
-     * CLI (needs `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`):
-       ```bash
-       cd functions && node scripts/invite-teacher.js teacher@college.edu --project YOUR_PROJECT_ID
-       ```
-   * Optional hardening: enable **Firebase App Check** (Play Integrity) for the app, then set
-     `enforceAppCheck: true` in `functions/index.js` and redeploy.
-   * If your organisation policy blocks public Cloud Run invokers, allow `allUsers` to invoke the
-     callable functions (they still require a Firebase ID token internally).
-
----
-
-## 7. Build and run
-
-Requirements: **Android Studio Ladybug (2024.2) or newer** (bundled JDK 17/21), Android SDK 35.
-
-1. *File → Open* → select the `QRAttendanceSystem` folder. Let Gradle sync (Android Studio
-   creates `local.properties` with your SDK path).
-2. Make sure `app/google-services.json` is present (section 6).
-3. Connect a phone with USB debugging (or start an emulator with a camera) → **Run ▶ app**.
-
-Command line:
-```bash
-./gradlew assembleDebug
-```
-```bash
-./gradlew installDebug
-```
-(Windows: `gradlew.bat …`). APK: `app/build/outputs/apk/debug/app-debug.apk`.
-
-**Demo flow:** approve a teacher email → register the teacher in the app → register a student
-on a second phone → teacher *Start Session* → student *Scan QR* → watch the student appear live.
-
-### Running entirely on the Firebase Emulator Suite (free, no Blaze plan)
-
-**Step-by-step beginner instructions: [LOCAL_SETUP_GUIDE.md](LOCAL_SETUP_GUIDE.md).** The
-default setup is two physical phones on the laptop's Windows Mobile Hotspot. The project is
-already configured for it (`useFirebaseEmulator=true`, `firebaseEmulatorHost=192.168.137.1` in
-`gradle.properties`) and includes Windows helper scripts:
-
-| Script | Does |
-|---|---|
-| `allow-hotspot-firewall.bat` | One-time, admin: allows TCP 9099/8080/5001 from the hotspot subnet 192.168.137.0/24 only (`remove` undoes it) |
-| `build-app.bat` | Builds the debug APK and copies it to `QR-Attendance.apk` for installing on the phones |
-| `start-emulators.bat` | Checks the hotspot, then starts Auth + Firestore + Functions emulators for the project id in `google-services.json`, restoring saved data |
-| `approve-teacher.bat` | Adds a `teacherInvites/{email}` entry in the local Firestore |
-| `stop-emulators.bat` | Exports all data to `emulator-data/`, then stops the emulators |
-
-To use real cloud Firebase instead, set `useFirebaseEmulator=false`. The emulator switch exists
-only in debug builds; release builds always use production Firebase over HTTPS.
-
----
-
-## 8. Testing
+## Testing
 
 ### Automated tests
 
 | Suite | Command | Count | Covers |
 |---|---|---|---|
 | Android JVM unit tests | `./gradlew testDebugUnitTest` | 65 | QR payload parsing, expiry logic & countdown, input validation, Firestore/Function mappers, error mapping, repository (duplicate / expired / invalid / network handling), MarkAttendance use case, Scanner, Login, Register and StartSession ViewModels |
-| Backend unit tests | `cd functions && npm run test:unit` | 28 | registration/session/payload validation, token generation & comparison, expiry boundary, attendance decision order, statistics |
-| Backend emulator tests | `cd functions && npm run test:emulator` | 71 total (adds 43) | every `markAttendance` path incl. concurrent duplicates, server-time expiry, token from another session, role checks, `createSession`, `registerUser` (duplicate email, teacher invite, role tampering), stats, scheduled expiry, **and the security rules** (profile/role tampering, token secrecy, attendance writes, session tampering) |
+| Backend unit tests | `cd functions && npm run test:unit` | 27 | registration/session/payload validation, token generation & comparison, expiry boundary, attendance decision order, statistics |
+| Backend emulator tests | `cd functions && npm run test:emulator` | 43 (this command runs all 70 backend tests; Node's summary shows 71 because it also counts the shared helpers file) | every `markAttendance` path incl. concurrent duplicates, server-time expiry, token from another session, role checks, `createSession`, `registerUser` (duplicate email, teacher invite, role tampering), stats, scheduled expiry, **and the security rules** (profile/role tampering, token secrecy, attendance writes, session tampering) |
 
 `npm run test:emulator` needs the Firebase CLI on the PATH and Java 11+; it starts the Auth and
-Firestore emulators under the offline project id `demo-qr-attendance`. On Windows the Firestore
-emulator JVM occasionally keeps running after the tests finish; if the next run reports
-"port taken", stop the leftover `java … cloud-firestore-emulator` process (Task Manager).
+Firestore emulators under the offline project id `demo-qr-attendance`. Stop
+`start-emulators.bat` first, because both use the same ports. On Windows the Firestore emulator
+JVM occasionally keeps running after the tests finish; if the next run reports "port taken",
+stop the leftover `java … cloud-firestore-emulator` process (Task Manager).
 
 ### Manual test checklist
 
@@ -330,8 +301,8 @@ emulator JVM occasionally keeps running after the tests finish; if the next run 
 | 10 | Student scans the same QR again | "Attendance Already Marked" |
 | 11 | Wait for the countdown to end, scan with a new student | Teacher sees "Session Expired" (QR hidden, list kept); student sees "QR Code Expired" |
 | 12 | Scan any other QR (a URL, Wi-Fi code) | "Invalid QR Code" without a network call |
-| 13 | Student dashboard / View all | History shows the session; attended count and % update |
-| 14 | Teacher dashboard | Past sessions with date, time, present count and Ended status; tap to view the final list |
+| 13 | Student dashboard / View all | History shows the session; attended count and % update; search filters by subject |
+| 14 | Teacher dashboard | Past sessions with date, time, present count and Ended status; per-subject summary; tap a session to view the final list |
 | 15 | Logout (both roles) | Confirmation dialog → Login; Back does not return to the dashboard |
 | + | Deny camera permission twice | "Camera permission needed" → *Open Settings*; returning after granting starts the camera |
 | + | Airplane mode, then scan | "Unable to connect. Please try again."; nothing recorded |
@@ -340,7 +311,7 @@ emulator JVM occasionally keeps running after the tests finish; if the next run 
 
 ---
 
-## 9. Edge cases and how they are handled
+## Edge cases and how they are handled
 
 | Case | Handling |
 |---|---|
@@ -364,7 +335,7 @@ emulator JVM occasionally keeps running after the tests finish; if the next run 
 
 ---
 
-## 10. Known limitations
+## Known limitations and future ideas
 
 * **QR sharing:** a student could photograph the QR and send it to an absent friend during the
   validity window. Short durations (2–5 min) reduce this; production systems add rotating
@@ -372,13 +343,19 @@ emulator JVM occasionally keeps running after the tests finish; if the next run 
 * **No enrolment model:** "sessions conducted" counts only sessions of subjects (same teacher)
   the student has attended at least once since registering. A course roster would make the
   percentage exact for every enrolled subject.
-* **Blaze plan required** to deploy Cloud Functions (the Emulator Suite is free).
+* **Blaze plan required** to deploy Cloud Functions to the cloud (the Emulator Suite is free).
 * **App Check is off by default**, so the callable endpoints can be called by any client with a
   valid Firebase ID token (all authorisation is still enforced server-side).
 * Student names in attendance records are denormalised at scan time and don't change if a
   profile name is edited later. The app doesn't include a profile-edit screen (rules allow
   name-only edits).
 * Roll-number uniqueness is not enforced; there is no password-reset or email-verification UI.
+* The helper scripts (`*.bat`) are Windows-only; on macOS/Linux, run the underlying `firebase`
+  and `./gradlew` commands directly.
 * `com.example.qrattendance` is fine for a college project but cannot be published on Google
   Play; change `applicationId`/`namespace` (and re-register the Firebase app) before publishing.
 * String literals are in Kotlin rather than `strings.xml`, so the UI is English-only.
+
+**Ideas for future versions:** rotating QR tokens, push notifications when a session starts
+(Firebase Cloud Messaging), exporting a session's attendance as CSV, class rosters with
+enrolment, and enabling App Check.
