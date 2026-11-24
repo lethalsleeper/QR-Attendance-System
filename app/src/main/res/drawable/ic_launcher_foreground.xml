@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground: a stylised QR code inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Finder patterns (rings) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M34,34h16v16h-16z M37,37v10h10v-10z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M58,34h16v16h-16z M61,37v10h10v-10z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M34,58h16v16h-16z M37,61v10h10v-10z" />
+    <!-- Finder centres + data modules -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M40,40h4v4h-4z M64,40h4v4h-4z M40,64h4v4h-4z M58,58h5v5h-5z M69,58h5v5h-5z M63.5,63.5h5v5h-5z M58,69h5v5h-5z M69,69h5v5h-5z M52.5,52.5h3v3h-3z M52.5,36h3v6h-3z M36,52.5h6v3h-6z" />
+</vector>

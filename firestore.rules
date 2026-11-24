@@ -1,0 +1,89 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// QR Attendance System – Firestore security rules
+//
+// Privileged writes (accounts/roles, sessions, attendance) are performed ONLY by
+// Cloud Functions using the Admin SDK, which bypasses these rules. Clients get the
+// minimum read access they need plus two narrowly-validated updates.
+//
+//   users/{uid}                          read: owner · update: owner, `name` only
+//   users/{uid}/attendance/{sessionId}   read: owner (student history) · no writes
+//   teacherInvites/{email}               no client access (admin allow-list)
+//   sessions/{sessionId}                 read: owning teacher (contains the token)
+//                                        update: owning teacher may end an active session
+//   sessions/{id}/attendance/{studentId} read: owning teacher · no client writes
+// ---------------------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Role comes from the server-written profile, never from the request.
+    function hasRole(role) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isTeacher() {
+      return hasRole('teacher');
+    }
+
+    match /users/{uid} {
+      allow get: if isSelf(uid);
+      allow list: if false;
+      // Profiles are created by the registerUser function; role/email/rollNumber are immutable.
+      allow create, delete: if false;
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 60;
+
+      match /attendance/{sessionId} {
+        allow read: if isSelf(uid);
+        allow write: if false;
+      }
+    }
+
+    match /teacherInvites/{email} {
+      allow read, write: if false;
+    }
+
+    match /sessions/{sessionId} {
+      // Only the teacher who owns the session can read it (it contains the QR token).
+      // List queries must filter on teacherId == auth.uid to satisfy this rule.
+      allow read: if isTeacher() && resource.data.teacherId == request.auth.uid;
+
+      // Sessions are created by the createSession function only.
+      allow create, delete: if false;
+
+      // The owner may end an active session: status → "expired", endedAt = server time.
+      // Nothing else (token, expiresAt, counts, ownership) can be changed by a client.
+      allow update: if isTeacher()
+        && resource.data.teacherId == request.auth.uid
+        && resource.data.status == 'active'
+        && request.resource.data.status == 'expired'
+        && request.resource.data.endedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'endedAt']);
+
+      match /attendance/{studentId} {
+        allow read: if isTeacher()
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.teacherId == request.auth.uid;
+        // Attendance is written exclusively by the markAttendance function.
+        allow write: if false;
+      }
+    }
+
+    // Deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# Gradle / Android Studio
+.gradle/
+build/
+/app/build/
+/captures
+.externalNativeBuild/
+.cxx/
+local.properties
+*.iml
+.idea/
+.DS_Store
+.kotlin/
+
+# Firebase config – contains your project's identifiers; download it yourself (see README)
+app/google-services.json
+
+# Keystores
+*.jks
+*.keystore
+
+# Cloud Functions
+functions/node_modules/
+functions/*.log
+firebase-debug.log
+firestore-debug.log
+functions/firestore-debug.log
+emulator-data/
+ui-debug.log
+.firebase/
+
+# Built app copied by build-app.bat
+QR-Attendance.apk
